@@ -1,0 +1,12 @@
+# Screenpipe binaries
+screenpipe_bin/
+screenpipe.zip
+
+# Personal Data / Reports
+*.md
+*.sqlite
+
+# Python
+__pycache__/
+*.pyc
+.venv/
