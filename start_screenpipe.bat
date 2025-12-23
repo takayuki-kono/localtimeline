@@ -1,4 +1,4 @@
 @echo off
-cd /d "D:\localtimeline"
+cd /d "%~dp0"
 start "" ".\screenpipe_bin\bin\screenpipe.exe" --language japanese
 exit

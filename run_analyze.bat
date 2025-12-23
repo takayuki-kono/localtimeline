@@ -1,4 +1,4 @@
 @echo off
-cd /d "D:\localtimeline"
+cd /d "%~dp0"
 python analyze_usage.py
 exit
