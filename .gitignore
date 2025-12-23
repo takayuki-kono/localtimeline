@@ -4,6 +4,7 @@ screenpipe.zip
 
 # Personal Data / Reports
 *.md
+!README.md
 *.sqlite
 
 # Python
