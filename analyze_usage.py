@@ -22,15 +22,13 @@ def clean_window_title(app, title):
     if not title:
         return "Unknown"
     
-    # 一般的なブラウザの末尾削除
-    # 例: "GitHub - ... - Google Chrome" -> "GitHub - ..."
+    # ブラウザの末尾削除
     if app in ["Google Chrome", "Microsoft Edge", "Firefox"]:
         title = re.sub(r" - Google Chrome$", "", title)
-        title = re.sub(r" - Microsoft\u200b Edge$", "", title) # Edgeはたまに特殊文字が入る
+        title = re.sub(r" - Microsoft\u200b Edge$", "", title)
         title = re.sub(r" - Mozilla Firefox$", "", title)
     
-    # アプリ名がそのまま入っているだけの重複を削除
-    # 例: "Visual Studio Code" アプリで "main.py - Visual Studio Code" -> "main.py"
+    # アプリ名重複削除
     if title.endswith(f" - {app}"):
         title = title[:-len(app)-3]
         
@@ -107,14 +105,14 @@ def analyze_activity():
 
         if last_time is not None:
             diff = (current_time - last_time).total_seconds()
-            if 0 < diff < 300:
+            if 0 < diff < 300: # 5分未満の間隔のみ有効
                 app_usage[last_app] = app_usage.get(last_app, 0) + diff
                 
-                # ウィンドウタイトルのクリーニング
                 simple_title = clean_window_title(last_app, last_window)
                 win_key = f"[{last_app}] {simple_title}"
                 window_usage[win_key] = window_usage.get(win_key, 0) + diff
 
+        # タイムラインは変化があった時だけ
         if window != last_window or app != last_app:
             simple_title = clean_window_title(app, window)
             timeline.append({
@@ -135,19 +133,25 @@ def analyze_activity():
     sorted_apps = sorted(app_usage.items(), key=lambda x: x[1], reverse=True)
     for app, seconds in sorted_apps:
         minutes = int(seconds // 60)
+        # 1分未満のアプリは表示しない
+        if minutes < 1: continue
         output_content += f"- **{app}**: {minutes} min\n"
     
-    output_content += "\n## 📑 Window Usage Ranking (Top 50)\n"
+    output_content += "\n## 📑 Window Usage Ranking (Over 2 min)\n"
     sorted_windows = sorted(window_usage.items(), key=lambda x: x[1], reverse=True)
-    for win, seconds in sorted_windows[:50]:
+    
+    count = 0
+    for win, seconds in sorted_windows:
         minutes = int(seconds // 60)
-        # 1分未満でも秒数を表示して見えるようにする
-        if minutes < 1:
-            time_str = f"{int(seconds)} sec"
-        else:
-            time_str = f"{minutes} min"
-            
-        output_content += f"- **{time_str}**: {win}\n"
+        
+        # 2分未満はスキップ
+        if minutes < 2: continue
+        
+        output_content += f"- **{minutes} min**: {win}\n"
+        count += 1
+        
+    if count == 0:
+        output_content += "- (No activity over 2 minutes)\n"
         
     output_content += "\n## ⏱ Detailed Timeline\n"
     current_hour = ""
