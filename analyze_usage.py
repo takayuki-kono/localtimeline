@@ -4,6 +4,20 @@ import os
 import glob
 import time
 
+def to_jst(ts_str):
+    """UTCのタイムスタンプ文字列をJST(datetime)に変換"""
+    try:
+        # タイムゾーン情報(+00:00やZ)を除去してパース
+        ts_clean = ts_str.split('+')[0].replace('Z', '')
+        if '.' in ts_clean:
+            main_part, sub_part = ts_clean.split('.')
+            ts_clean = f"{main_part}.{sub_part[:6]}"
+        dt_utc = datetime.fromisoformat(ts_clean)
+        # 9時間足す
+        return dt_utc + timedelta(hours=9)
+    except ValueError:
+        return None
+
 def analyze_activity():
     db_path = os.path.expanduser('~/.screenpipe/db.sqlite')
     if not os.path.exists(db_path):
@@ -13,30 +27,46 @@ def analyze_activity():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # 最新の日付を取得
-    cursor.execute("SELECT MAX(SUBSTR(timestamp, 1, 10)) FROM frames")
+    # 最新のデータを特定するために、直近のレコードを取得
+    cursor.execute("SELECT timestamp FROM frames ORDER BY timestamp DESC LIMIT 1")
     res = cursor.fetchone()
-    if not res or not res[0]:
+    if not res:
         print("No data found in database.")
         return
-    latest_date = res[0]
     
-    print(f"Analyzing activity for {latest_date}...")
+    # 最新データのJST日付を取得
+    last_timestamp_utc = res[0]
+    last_datetime_jst = to_jst(last_timestamp_utc)
+    target_date_str = last_datetime_jst.strftime('%Y-%m-%d')
+    
+    print(f"Analyzing activity for {target_date_str} (JST)...")
 
-    # データ取得 (時系列順)
+    # データの取得
+    # JSTでその日のデータを取りたいが、SQLでUTC変換するのは複雑なので、
+    # 前日〜翌日の広めの範囲(UTC)で取得して、Python側でフィルタリングする
+    
+    # ターゲット日の00:00:00 JST -> 前日 15:00:00 UTC
+    # ターゲット日の23:59:59 JST -> 当日 14:59:59 UTC
+    # 簡易的に、UTC日付で「ターゲット日」と「その前日」のデータを全部取ればカバーできる
+    
+    yesterday_jst = last_datetime_jst - timedelta(days=1)
+    yesterday_str = yesterday_jst.strftime('%Y-%m-%d')
+    
+    # UTCの文字列検索用 (広い範囲を取る)
     query = """
     SELECT 
         f.timestamp, 
-        f.app_name, 
+        f.app_name,
         f.window_name
     FROM frames f
-    WHERE f.timestamp LIKE ?
+    WHERE (f.timestamp LIKE ? OR f.timestamp LIKE ?)
     AND f.app_name IS NOT NULL
     AND f.window_name IS NOT NULL
     ORDER BY f.timestamp ASC
     """
     
-    cursor.execute(query, (f'{latest_date}%',))
+    # ターゲット日(JST)に関連しそうなUTC日付(前日と当日)で検索
+    cursor.execute(query, (f'{target_date_str}%', f'{yesterday_str}%'))
     rows = cursor.fetchall()
     
     if not rows:
@@ -57,22 +87,23 @@ def analyze_activity():
         app = row[1]
         window = row[2]
         
-        try:
-            ts_clean = ts_str.split('+')[0].replace('Z', '')
-            if '.' in ts_clean:
-                main_part, sub_part = ts_clean.split('.')
-                ts_clean = f"{main_part}.{sub_part[:6]}"
-            current_time = datetime.fromisoformat(ts_clean)
-        except ValueError:
+        current_time = to_jst(ts_str)
+        if current_time is None:
+            continue
+            
+        # JSTでターゲット日付と一致するものだけ処理対象にする
+        if current_time.strftime('%Y-%m-%d') != target_date_str:
             continue
 
         if last_time is not None:
             diff = (current_time - last_time).total_seconds()
+            # 5分未満の間隔なら継続とみなす
             if 0 < diff < 300:
                 app_usage[last_app] = app_usage.get(last_app, 0) + diff
                 win_key = f"[{last_app}] {last_window}"
                 window_usage[win_key] = window_usage.get(win_key, 0) + diff
 
+        # タイムラインには変化があった時だけ追加
         if window != last_window or app != last_app:
             timeline.append({
                 'time': current_time.strftime('%H:%M'),
@@ -85,7 +116,7 @@ def analyze_activity():
         last_window = window
 
     # 出力データの生成
-    output_content = f"# Activity Report: {latest_date}\n\n"
+    output_content = f"# Activity Report: {target_date_str} (JST)\n\n"
     
     # 1. アプリ別
     output_content += "## 📊 App Usage Ranking\n"
@@ -112,8 +143,8 @@ def analyze_activity():
             current_hour = hour
         output_content += f"- **{item['time']}** [{item['app']}] {item['window']}\n"
 
-    # ファイル書き込み (カレントディレクトリ)
-    filename = f"report_{latest_date}.md"
+    # ファイル書き込み
+    filename = f"report_{target_date_str}.md"
     filepath = os.path.join(os.getcwd(), filename)
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(output_content)
