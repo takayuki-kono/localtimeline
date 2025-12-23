@@ -3,20 +3,38 @@ from datetime import datetime, timedelta
 import os
 import glob
 import time
+import re
 
 def to_jst(ts_str):
     """UTCのタイムスタンプ文字列をJST(datetime)に変換"""
     try:
-        # タイムゾーン情報(+00:00やZ)を除去してパース
         ts_clean = ts_str.split('+')[0].replace('Z', '')
         if '.' in ts_clean:
             main_part, sub_part = ts_clean.split('.')
             ts_clean = f"{main_part}.{sub_part[:6]}"
         dt_utc = datetime.fromisoformat(ts_clean)
-        # 9時間足す
         return dt_utc + timedelta(hours=9)
     except ValueError:
         return None
+
+def clean_window_title(app, title):
+    """集計用にウィンドウタイトルを簡略化する"""
+    if not title:
+        return "Unknown"
+    
+    # 一般的なブラウザの末尾削除
+    # 例: "GitHub - ... - Google Chrome" -> "GitHub - ..."
+    if app in ["Google Chrome", "Microsoft Edge", "Firefox"]:
+        title = re.sub(r" - Google Chrome$", "", title)
+        title = re.sub(r" - Microsoft\u200b Edge$", "", title) # Edgeはたまに特殊文字が入る
+        title = re.sub(r" - Mozilla Firefox$", "", title)
+    
+    # アプリ名がそのまま入っているだけの重複を削除
+    # 例: "Visual Studio Code" アプリで "main.py - Visual Studio Code" -> "main.py"
+    if title.endswith(f" - {app}"):
+        title = title[:-len(app)-3]
+        
+    return title
 
 def analyze_activity():
     db_path = os.path.expanduser('~/.screenpipe/db.sqlite')
@@ -27,36 +45,25 @@ def analyze_activity():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # 最新のデータを特定するために、直近のレコードを取得
     cursor.execute("SELECT timestamp FROM frames ORDER BY timestamp DESC LIMIT 1")
     res = cursor.fetchone()
     if not res:
         print("No data found in database.")
         return
     
-    # 最新データのJST日付を取得
     last_timestamp_utc = res[0]
     last_datetime_jst = to_jst(last_timestamp_utc)
     target_date_str = last_datetime_jst.strftime('%Y-%m-%d')
     
     print(f"Analyzing activity for {target_date_str} (JST)...")
 
-    # データの取得
-    # JSTでその日のデータを取りたいが、SQLでUTC変換するのは複雑なので、
-    # 前日〜翌日の広めの範囲(UTC)で取得して、Python側でフィルタリングする
-    
-    # ターゲット日の00:00:00 JST -> 前日 15:00:00 UTC
-    # ターゲット日の23:59:59 JST -> 当日 14:59:59 UTC
-    # 簡易的に、UTC日付で「ターゲット日」と「その前日」のデータを全部取ればカバーできる
-    
     yesterday_jst = last_datetime_jst - timedelta(days=1)
     yesterday_str = yesterday_jst.strftime('%Y-%m-%d')
     
-    # UTCの文字列検索用 (広い範囲を取る)
     query = """
     SELECT 
         f.timestamp, 
-        f.app_name,
+        f.app_name, 
         f.window_name
     FROM frames f
     WHERE (f.timestamp LIKE ? OR f.timestamp LIKE ?)
@@ -65,7 +72,6 @@ def analyze_activity():
     ORDER BY f.timestamp ASC
     """
     
-    # ターゲット日(JST)に関連しそうなUTC日付(前日と当日)で検索
     cursor.execute(query, (f'{target_date_str}%', f'{yesterday_str}%'))
     rows = cursor.fetchall()
     
@@ -73,7 +79,6 @@ def analyze_activity():
         print("No rows found.")
         return
 
-    # 集計処理
     app_usage = {}
     window_usage = {}
     timeline = []
@@ -81,6 +86,9 @@ def analyze_activity():
     last_time = None
     last_app = None
     last_window = None
+    
+    process_count = 0
+    skip_count = 0
     
     for row in rows:
         ts_str = row[0]
@@ -91,49 +99,56 @@ def analyze_activity():
         if current_time is None:
             continue
             
-        # JSTでターゲット日付と一致するものだけ処理対象にする
         if current_time.strftime('%Y-%m-%d') != target_date_str:
+            skip_count += 1
             continue
+
+        process_count += 1
 
         if last_time is not None:
             diff = (current_time - last_time).total_seconds()
-            # 5分未満の間隔なら継続とみなす
             if 0 < diff < 300:
                 app_usage[last_app] = app_usage.get(last_app, 0) + diff
-                win_key = f"[{last_app}] {last_window}"
+                
+                # ウィンドウタイトルのクリーニング
+                simple_title = clean_window_title(last_app, last_window)
+                win_key = f"[{last_app}] {simple_title}"
                 window_usage[win_key] = window_usage.get(win_key, 0) + diff
 
-        # タイムラインには変化があった時だけ追加
         if window != last_window or app != last_app:
+            simple_title = clean_window_title(app, window)
             timeline.append({
                 'time': current_time.strftime('%H:%M'),
                 'app': app,
-                'window': window
+                'window': simple_title
             })
 
         last_time = current_time
         last_app = app
         last_window = window
+    
+    print(f"Processed: {process_count} records.")
 
-    # 出力データの生成
     output_content = f"# Activity Report: {target_date_str} (JST)\n\n"
     
-    # 1. アプリ別
     output_content += "## 📊 App Usage Ranking\n"
     sorted_apps = sorted(app_usage.items(), key=lambda x: x[1], reverse=True)
     for app, seconds in sorted_apps:
         minutes = int(seconds // 60)
         output_content += f"- **{app}**: {minutes} min\n"
     
-    # 2. ウィンドウ別
-    output_content += "\n## 📑 Window Usage Ranking (Top 20)\n"
+    output_content += "\n## 📑 Window Usage Ranking (Top 50)\n"
     sorted_windows = sorted(window_usage.items(), key=lambda x: x[1], reverse=True)
-    for win, seconds in sorted_windows[:20]:
+    for win, seconds in sorted_windows[:50]:
         minutes = int(seconds // 60)
-        if minutes < 1: continue
-        output_content += f"- **{minutes} min**: {win}\n"
+        # 1分未満でも秒数を表示して見えるようにする
+        if minutes < 1:
+            time_str = f"{int(seconds)} sec"
+        else:
+            time_str = f"{minutes} min"
+            
+        output_content += f"- **{time_str}**: {win}\n"
         
-    # 3. タイムライン
     output_content += "\n## ⏱ Detailed Timeline\n"
     current_hour = ""
     for item in timeline:
@@ -143,7 +158,6 @@ def analyze_activity():
             current_hour = hour
         output_content += f"- **{item['time']}** [{item['app']}] {item['window']}\n"
 
-    # ファイル書き込み
     filename = f"report_{target_date_str}.md"
     filepath = os.path.join(os.getcwd(), filename)
     with open(filepath, "w", encoding="utf-8") as f:
