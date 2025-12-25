@@ -15,8 +15,9 @@ class PomodoroTimer:
         self.root.attributes("-topmost", True)
         self.root.configure(bg="#202020")
         
+        # 設定 (秒)
         self.FOCUS_TIME = 25 * 60
-        # 休憩モードは廃止するため設定削除
+        self.BREAK_TIME = 5 * 60
         
         self.time_left = self.FOCUS_TIME
         self.is_running = False
@@ -91,13 +92,15 @@ class PomodoroTimer:
         self.session_start_time = None
         self.pending_end_time = None
         
-        # Breakには行かず、Focusの初期状態に戻す
-        self.mode = "Focus"
-        self.time_left = self.FOCUS_TIME
-        self.label_status.config(text="FOCUS", fg="#FF5555")
+        # 評価が終わったら自動でBreakモードに移行
+        self.mode = "Break"
+        self.time_left = self.BREAK_TIME
+        self.label_status.config(text="BREAK", fg="#55FF55")
         self.label_time.config(text=self.format_time(self.time_left))
         
         self.show_timer_screen()
+        self.is_running = True # 休憩は自動で開始
+        self.session_start_time = datetime.now()
         self.update_window_title()
 
     def write_log(self, start, end, mode, score=""):
@@ -117,46 +120,71 @@ class PomodoroTimer:
 
     def toggle_timer(self, event=None):
         if not self.is_running:
-            # Start
+            # Start (FocusでもBreakでも)
             self.is_running = True
             self.session_start_time = datetime.now()
         else:
-            # Pause/Finish (クリックで即終了扱い)
+            # Stop
             self.is_running = False
             end_time = datetime.now()
             
-            # 評価画面へ
-            self.pending_end_time = end_time
-            self.show_rate_screen()
+            if self.mode == "Focus":
+                # Focus中なら評価画面へ
+                self.pending_end_time = end_time
+                self.show_rate_screen()
+            else:
+                # Break中なら「一時停止」ではなく「終了(Reset)」してFocusに戻る
+                self.write_log(self.session_start_time, end_time, "Break")
+                self.session_start_time = None
+                self.reset_to_focus()
             
         self.update_window_title()
 
-    def reset_timer(self, event=None):
+    def reset_to_focus(self):
         self.is_running = False
-        self.show_timer_screen()
+        self.mode = "Focus"
         self.time_left = self.FOCUS_TIME
+        self.label_status.config(text="FOCUS", fg="#FF5555")
         self.label_time.config(text=self.format_time(self.time_left))
+        self.show_timer_screen()
+
+    def reset_timer(self, event=None):
+        # 右クリックリセット
+        self.is_running = False
+        self.session_start_time = None
+        self.reset_to_focus()
         self.update_window_title()
 
-    def play_sound(self):
-        # 完了音のみ
+    def play_sound(self, mode):
         def _beep():
-            winsound.Beep(1500, 150)
-            time.sleep(0.05)
-            winsound.Beep(1500, 150)
-            time.sleep(0.05)
-            winsound.Beep(1500, 400)
+            if mode == "Focus":
+                winsound.Beep(1500, 150)
+                time.sleep(0.05)
+                winsound.Beep(1500, 150)
+                time.sleep(0.05)
+                winsound.Beep(1500, 400)
+            else:
+                winsound.Beep(800, 300)
+                time.sleep(0.1)
+                winsound.Beep(800, 300)
         threading.Thread(target=_beep, daemon=True).start()
 
     def switch_mode(self):
         # タイマー完走時
         self.is_running = False
         end_time = datetime.now()
-        self.play_sound()
+        self.play_sound(self.mode)
 
-        # 評価画面へ
-        self.pending_end_time = end_time
-        self.show_rate_screen()
+        if self.mode == "Focus":
+            self.pending_end_time = end_time
+            self.show_rate_screen()
+        else:
+            # 休憩完走 -> Focusに戻る
+            self.write_log(self.session_start_time, end_time, "Break")
+            self.session_start_time = None
+            self.reset_to_focus()
+            messagebox.showinfo("Pomodoro", "Break finished! Let's focus.")
+        
         self.update_window_title()
 
     def update_window_title(self):
