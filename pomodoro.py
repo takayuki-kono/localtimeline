@@ -92,14 +92,14 @@ class PomodoroTimer:
         self.session_start_time = None
         self.pending_end_time = None
         
-        # 休憩モードをセットするが、自動開始はしない
+        # 評価完了後、Breakモードへ (待機状態)
         self.mode = "Break"
         self.time_left = self.BREAK_TIME
         self.label_status.config(text="BREAK", fg="#55FF55")
         self.label_time.config(text=self.format_time(self.time_left))
         
         self.show_timer_screen()
-        self.is_running = False # 待機状態にする
+        self.is_running = False
         self.update_window_title()
 
     def write_log(self, start, end, mode, score=""):
@@ -170,14 +170,23 @@ class PomodoroTimer:
         end_time = datetime.now()
         self.play_sound(self.mode)
 
+        # 最前面に持ってくる
+        self.root.lift()
+        self.root.attributes("-topmost", True)
+
         if self.mode == "Focus":
+            # ポップアップを表示
+            messagebox.showinfo("Pomodoro", "Focus session finished!")
+            
             self.pending_end_time = end_time
             self.show_rate_screen()
         else:
+            # 休憩終了時もポップアップ
+            messagebox.showinfo("Pomodoro", "Break finished! Let's focus.")
+            
             self.write_log(self.session_start_time, end_time, "Break")
             self.session_start_time = None
             self.reset_to_focus()
-            messagebox.showinfo("Pomodoro", "Break finished! Let's focus.")
         
         self.update_window_title()
 
