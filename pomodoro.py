@@ -92,15 +92,14 @@ class PomodoroTimer:
         self.session_start_time = None
         self.pending_end_time = None
         
-        # 評価が終わったら自動でBreakモードに移行
+        # 休憩モードをセットするが、自動開始はしない
         self.mode = "Break"
         self.time_left = self.BREAK_TIME
         self.label_status.config(text="BREAK", fg="#55FF55")
         self.label_time.config(text=self.format_time(self.time_left))
         
         self.show_timer_screen()
-        self.is_running = True # 休憩は自動で開始
-        self.session_start_time = datetime.now()
+        self.is_running = False # 待機状態にする
         self.update_window_title()
 
     def write_log(self, start, end, mode, score=""):
@@ -120,7 +119,7 @@ class PomodoroTimer:
 
     def toggle_timer(self, event=None):
         if not self.is_running:
-            # Start (FocusでもBreakでも)
+            # Start
             self.is_running = True
             self.session_start_time = datetime.now()
         else:
@@ -129,11 +128,9 @@ class PomodoroTimer:
             end_time = datetime.now()
             
             if self.mode == "Focus":
-                # Focus中なら評価画面へ
                 self.pending_end_time = end_time
                 self.show_rate_screen()
             else:
-                # Break中なら「一時停止」ではなく「終了(Reset)」してFocusに戻る
                 self.write_log(self.session_start_time, end_time, "Break")
                 self.session_start_time = None
                 self.reset_to_focus()
@@ -149,7 +146,6 @@ class PomodoroTimer:
         self.show_timer_screen()
 
     def reset_timer(self, event=None):
-        # 右クリックリセット
         self.is_running = False
         self.session_start_time = None
         self.reset_to_focus()
@@ -170,7 +166,6 @@ class PomodoroTimer:
         threading.Thread(target=_beep, daemon=True).start()
 
     def switch_mode(self):
-        # タイマー完走時
         self.is_running = False
         end_time = datetime.now()
         self.play_sound(self.mode)
@@ -179,7 +174,6 @@ class PomodoroTimer:
             self.pending_end_time = end_time
             self.show_rate_screen()
         else:
-            # 休憩完走 -> Focusに戻る
             self.write_log(self.session_start_time, end_time, "Break")
             self.session_start_time = None
             self.reset_to_focus()
