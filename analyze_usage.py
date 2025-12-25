@@ -18,12 +18,6 @@ def to_jst(ts_str):
         return None
 
 def load_focus_periods_and_scores(target_date_str):
-    """
-    focus_log.csv から、指定した日付のFocus期間とスコアを取得する
-    Return: (periods, average_score)
-      periods: [(start_dt, end_dt), ...]
-      average_score: float or None
-    """
     log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "focus_log.csv")
     if not os.path.exists(log_file):
         return [], None
@@ -37,15 +31,11 @@ def load_focus_periods_and_scores(target_date_str):
             for row in reader:
                 if row["mode"] != "Focus":
                     continue
-                
                 try:
                     start_dt = datetime.strptime(row["start_time"], "%Y-%m-%d %H:%M:%S")
                     end_dt = datetime.strptime(row["end_time"], "%Y-%m-%d %H:%M:%S")
-                    
                     if start_dt.strftime('%Y-%m-%d') == target_date_str:
                         periods.append((start_dt, end_dt))
-                        
-                        # スコア集計 (カラムがあれば)
                         if "score" in row and row["score"]:
                             try:
                                 scores.append(int(row["score"]))
@@ -99,7 +89,6 @@ def analyze_activity():
     
     print(f"Analyzing activity for {target_date_str} (JST)...")
 
-    # Focus期間とスコアの読み込み
     focus_periods, avg_score = load_focus_periods_and_scores(target_date_str)
     print(f"Loaded {len(focus_periods)} focus sessions. Average Score: {avg_score}")
 
@@ -135,9 +124,6 @@ def analyze_activity():
     last_app = None
     last_window = None
     
-    process_count = 0
-    skip_count = 0
-    
     for row in rows:
         ts_str = row[0]
         app = row[1]
@@ -146,10 +132,7 @@ def analyze_activity():
         current_time = to_jst(ts_str)
         if current_time is None: continue
         if current_time.strftime('%Y-%m-%d') != target_date_str:
-            skip_count += 1
             continue
-
-        process_count += 1
 
         if last_time is not None:
             diff = (current_time - last_time).total_seconds()
@@ -174,12 +157,9 @@ def analyze_activity():
         last_time = current_time
         last_app = app
         last_window = window
-    
-    print(f"Processed: {process_count} records.")
 
     output_content = f"# Activity Report: {target_date_str} (JST)\n\n"
     
-    # スコア表示
     if avg_score is not None:
         output_content += f"## ⭐ Today's Focus Score: **{avg_score:.1f} / 10**\n\n"
     
@@ -190,16 +170,17 @@ def analyze_activity():
         if minutes < 1: continue
         output_content += f"- **{app}**: {minutes} min\n"
         
-    output_content += "\n## 🎯 Focus Session Ranking\n"
+    output_content += "\n## 🎯 Focus Session Ranking (Over 2 min)\n"
     if focus_window_usage:
         sorted_focus = sorted(focus_window_usage.items(), key=lambda x: x[1], reverse=True)
+        count = 0
         for win, seconds in sorted_focus:
             minutes = int(seconds // 60)
-            if minutes < 1:
-                time_str = f"{int(seconds)} sec"
-            else:
-                time_str = f"{minutes} min"
-            output_content += f"- **{time_str}**: {win}\n"
+            if minutes < 2: continue
+            output_content += f"- **{minutes} min**: {win}\n"
+            count += 1
+        if count == 0:
+            output_content += "- (No focus activity over 2 minutes)\n"
     else:
         output_content += "- (No focus sessions recorded today)\n"
     
