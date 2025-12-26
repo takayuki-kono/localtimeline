@@ -46,7 +46,7 @@ def load_focus_periods_and_scores(target_date_str):
     except Exception as e:
         print(f"Error loading focus log: {e}")
         
-    avg_score = None
+avg_score = None
     if scores:
         avg_score = sum(scores) / len(scores)
         
@@ -90,7 +90,14 @@ def analyze_activity():
     print(f"Analyzing activity for {target_date_str} (JST)...")
 
     focus_periods, avg_score = load_focus_periods_and_scores(target_date_str)
-    print(f"Loaded {len(focus_periods)} focus sessions. Average Score: {avg_score}")
+    
+    # Focus合計時間の計算 (秒)
+    total_focus_seconds = 0
+    for start, end in focus_periods:
+        total_focus_seconds += (end - start).total_seconds()
+    
+    total_focus_min = int(total_focus_seconds // 60)
+    print(f"Loaded {len(focus_periods)} focus sessions. Total Focus Time: {total_focus_min} min. Average Score: {avg_score}")
 
     yesterday_jst = last_datetime_jst - timedelta(days=1)
     yesterday_str = yesterday_jst.strftime('%Y-%m-%d')
@@ -160,8 +167,12 @@ def analyze_activity():
 
     output_content = f"# Activity Report: {target_date_str} (JST)\n\n"
     
+    # 統計情報の表示
+    output_content += "## 📈 Statistics\n"
+    output_content += f"- **Total Focus Time**: {total_focus_min} min\n"
     if avg_score is not None:
-        output_content += f"## ⭐ Today's Focus Score: **{avg_score:.1f} / 10**\n\n"
+        output_content += f"- **Average Focus Score**: {avg_score:.1f} / 10\n"
+    output_content += "\n"
     
     output_content += "## 📊 App Usage Ranking (Daily Total)\n"
     sorted_apps = sorted(app_usage.items(), key=lambda x: x[1], reverse=True)
@@ -206,10 +217,12 @@ def analyze_activity():
 
     filename = f"report_{target_date_str}.md"
     filepath = os.path.join(os.getcwd(), filename)
-    with open(filepath, "w", encoding="utf-8") as f:
+    # 元の場所（D:\localtimeline）に保存されるように絶対パスを復元
+    report_path = os.path.join(r"D:\localtimeline", filename)
+    with open(report_path, "w", encoding="utf-8") as f:
         f.write(output_content)
         
-    print(f"Report saved to {filepath}")
+    print(f"Report saved to {report_path}")
     cleanup_old_videos()
 
 def cleanup_old_videos():
