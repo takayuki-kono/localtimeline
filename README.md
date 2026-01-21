@@ -6,6 +6,7 @@ HDD容量を圧迫しないよう、古い録画データは自動削除され�
 ## 機能
 - **自動記録**: PC起動時にバックグラウンドでScreenpipeを起動。
 - **日次レポート**: 毎日指定時刻に活動ログを集計し、`report_YYYY-MM-DD.md` を生成。
+- **タイムライン可視化**: 1日のFocus/Break状況を横一本のバーで可視化した画像 `focus_timeline_YYYY-MM-DD.png` を自動生成。
 - **自動掃除**: 24時間を経過した重い動画ファイル(.mp4)を自動削除。
 - **ポモドーロタイマー**: 常に最前面に表示されるタイマー。状態（Focus/Break）がログに記録されます。
 
@@ -67,7 +68,8 @@ schtasks /create /tn "DailyAIDiary" /tr "D:\localtimeline\run_analyze.bat" /sc d
 
 ## 使い方
 - **手動でレポート生成**: `run_analyze.bat` をダブルクリック。
-  - 同じフォルダに `report_YYYY-MM-DD.md` が作成されます。
+  - 同じフォルダに `report_YYYY-MM-DD.md` と `focus_timeline_YYYY-MM-DD.png` が作成されます。
+- **手動でタイムライン画像のみ生成**: `run_generate_focus_timeline.bat` をダブルクリック。
 - **手動で記録開始**: `start_screenpipe.bat` をダブルクリック。
 - **ポモドーロタイマー**: `start_pomodoro.bat` をダブルクリック。
   - **左クリック**: スタート / 一時停止

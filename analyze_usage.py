@@ -1,4 +1,4 @@
-import sqlite3
+﻿import sqlite3
 from datetime import datetime, timedelta
 import os
 import glob
@@ -46,10 +46,10 @@ def load_focus_periods_and_scores(target_date_str):
     except Exception as e:
         print(f"Error loading focus log: {e}")
         
-avg_score = None
+    avg_score = None
     if scores:
         avg_score = sum(scores) / len(scores)
-        
+
     return periods, avg_score
 
 def is_in_focus(dt, periods):
@@ -91,7 +91,7 @@ def analyze_activity():
 
     focus_periods, avg_score = load_focus_periods_and_scores(target_date_str)
     
-    # Focus合計時間の計算 (秒)
+    # Focus蜷郁ｨ域凾髢薙・險育ｮ・(遘・
     total_focus_seconds = 0
     for start, end in focus_periods:
         total_focus_seconds += (end - start).total_seconds()
@@ -167,21 +167,21 @@ def analyze_activity():
 
     output_content = f"# Activity Report: {target_date_str} (JST)\n\n"
     
-    # 統計情報の表示
-    output_content += "## 📈 Statistics\n"
+    # 邨ｱ險域ュ蝣ｱ縺ｮ陦ｨ遉ｺ
+    output_content += "## 嶋 Statistics\n"
     output_content += f"- **Total Focus Time**: {total_focus_min} min\n"
     if avg_score is not None:
         output_content += f"- **Average Focus Score**: {avg_score:.1f} / 10\n"
     output_content += "\n"
     
-    output_content += "## 📊 App Usage Ranking (Daily Total)\n"
+    output_content += "## 投 App Usage Ranking (Daily Total)\n"
     sorted_apps = sorted(app_usage.items(), key=lambda x: x[1], reverse=True)
     for app, seconds in sorted_apps:
         minutes = int(seconds // 60)
         if minutes < 1: continue
         output_content += f"- **{app}**: {minutes} min\n"
         
-    output_content += "\n## 🎯 Focus Session Ranking (Over 2 min)\n"
+    output_content += "\n## 識 Focus Session Ranking (Over 2 min)\n"
     if focus_window_usage:
         sorted_focus = sorted(focus_window_usage.items(), key=lambda x: x[1], reverse=True)
         count = 0
@@ -195,7 +195,7 @@ def analyze_activity():
     else:
         output_content += "- (No focus sessions recorded today)\n"
     
-    output_content += "\n## 📑 Window Usage Ranking (Over 2 min)\n"
+    output_content += "\n## 淘 Window Usage Ranking (Over 2 min)\n"
     sorted_windows = sorted(window_usage.items(), key=lambda x: x[1], reverse=True)
     count = 0
     for win, seconds in sorted_windows:
@@ -206,7 +206,7 @@ def analyze_activity():
     if count == 0:
         output_content += "- (No activity over 2 minutes)\n"
         
-    output_content += "\n## ⏱ Detailed Timeline\n"
+    output_content += "\n## 竢ｱ Detailed Timeline\n"
     current_hour = ""
     for item in timeline:
         hour = item['time'].split(':')[0]
@@ -216,8 +216,7 @@ def analyze_activity():
         output_content += f"- **{item['time']}** [{item['app']}] {item['window']}\n"
 
     filename = f"report_{target_date_str}.md"
-    filepath = os.path.join(os.getcwd(), filename)
-    # 元の場所（D:\localtimeline）に保存されるように絶対パスを復元
+    # 保存先を D:\localtimeline に設定
     report_path = os.path.join(r"D:\localtimeline", filename)
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(output_content)

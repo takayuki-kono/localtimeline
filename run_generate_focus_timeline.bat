@@ -1,5 +1,4 @@
 @echo off
-cd /d "%~dp0"
-python analyze_usage.py
+cd /d %~dp0
 python generate_focus_timeline.py
-exit
+pause
