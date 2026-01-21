@@ -50,17 +50,21 @@ def generate_focus_plot():
         # Calculate weighted focus time
         total_weighted_minutes = 0.0
         
-        # Setup plot
-        fig, ax = plt.subplots(figsize=(14, 1.5)) # Compact height
+        # Setup plot: 4 rows for 6-hour blocks
+        fig, axes = plt.subplots(4, 1, figsize=(14, 8)) # Increased height for 4 rows
+        plt.subplots_adjust(hspace=0.6) # Add space between rows
         
         # Define colors
-        focus_color_base = '#ff6b6b' # Reddish
+        focus_color_base = '#FF1493' # Passion Pink (DeepPink)
         break_color = '#4ecdc4' # Teal
         
-        # Base limits (00:00 to 23:59)
         start_of_day = datetime.strptime(date_str, '%Y-%m-%d')
-        end_of_day = start_of_day + timedelta(days=1)
         
+        # Define 6-hour blocks
+        time_blocks = [(0, 6), (6, 12), (12, 18), (18, 24)]
+
+        # Pre-calculate data styles to avoid repetition
+        plot_data = []
         for _, row in df.iterrows():
             start = mdates.date2num(row['start_time'])
             end = mdates.date2num(row['end_time'])
@@ -69,62 +73,70 @@ def generate_focus_plot():
             
             mode = row['mode']
             
-            # Determine color and alpha based on score
             if mode == 'Focus':
                 score = row.get('score')
                 if pd.isna(score) or score == '':
-                    score = 5 # Default score if missing
+                    score = 5
                 else:
                     try:
                         score = float(score)
                     except:
                         score = 5
                 
-                # Calculate alpha: min 0.3, max 1.0 based on score 1-10
                 alpha = 0.3 + (min(max(score, 1), 10) / 10) * 0.7
                 color = to_rgba(focus_color_base, alpha=alpha)
                 
-                # Add to weighted total time (minutes)
                 duration_min = (row['end_time'] - row['start_time']).total_seconds() / 60
                 total_weighted_minutes += duration_min * (score / 10.0)
-                
             else:
                 color = break_color
-                
-            ax.broken_barh([(start, width)], (0.3, 0.4), facecolors=color, edgecolor='white', linewidth=0.5)
+            
+            plot_data.append((start, width, color))
 
-        # Formatting
-        ax.set_ylim(0, 1)
-        ax.set_yticks([]) # No y-axis labels
-        
+        # Plot for each time block
+        for i, ax in enumerate(axes):
+            start_hour, end_hour = time_blocks[i]
+            block_start = start_of_day + timedelta(hours=start_hour)
+            block_end = start_of_day + timedelta(hours=end_hour)
+            
+            # Plot all data (clipping will handle visibility)
+            for start, width, color in plot_data:
+                ax.broken_barh([(start, width)], (0.3, 0.4), facecolors=color, edgecolor='white', linewidth=0.5)
+            
+            # Formatting
+            ax.set_ylim(0, 1)
+            ax.set_yticks([])
+            
+            # X-axis limits and ticks
+            ax.set_xlim(mdates.date2num(block_start), mdates.date2num(block_end))
+            
+            # Ticks every hour
+            hours = [block_start + timedelta(hours=h) for h in range(end_hour - start_hour + 1)]
+            ax.set_xticks([mdates.date2num(h) for h in hours])
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+            ax.tick_params(axis='x', labelsize=10)
+            
+            # Add label for the block (e.g., "00:00 - 06:00")
+            ax.set_ylabel(f"{start_hour:02d}:00", rotation=0, ha='right', va='center', fontsize=11, labelpad=10)
+            
+            # Draw grid
+            ax.grid(True, axis='x', linestyle='--', alpha=0.5)
+            # Minor grid for minutes (optional, maybe too cluttered? let's stick to hour grid but make it clear)
+            
+            # Remove spines
+            ax.spines['top'].set_visible(False)
+            ax.spines['left'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['bottom'].set_position(('data', 0.25))
+
+        # Main Title
         title_text = f'Focus Timeline: {date_str} (Weighted Focus Time: {int(total_weighted_minutes)} min)'
-        ax.set_title(title_text, fontsize=14)
-        ax.set_xlabel('Time', fontsize=10)
+        fig.suptitle(title_text, fontsize=16, y=0.95)
         
-        # X-axis formatting
-        ax.set_xlim(mdates.date2num(start_of_day), mdates.date2num(end_of_day))
-        
-        # Set ticks every hour from 1 to 24
-        hours = [start_of_day + timedelta(hours=i) for i in range(1, 25)]
-        ax.set_xticks([mdates.date2num(h) for h in hours])
-        ax.set_xticklabels([f"{i}" for i in range(1, 25)], fontsize=9)
-        
-        plt.xticks(rotation=0)
-        
-        # Add Legend
-        # Create a proxy artist for the legend with average color/alpha
+        # Legend
         patches = [mpatches.Patch(color=focus_color_base, label='Focus (Darker=High Score)'),
                    mpatches.Patch(color=break_color, label='Break')]
-        plt.legend(handles=patches, loc='upper right', bbox_to_anchor=(1, 1.4), ncol=2, frameon=False)
-
-        # Draw grid for easier reading
-        ax.grid(True, axis='x', linestyle='--', alpha=0.5)
-
-        # Remove top/left/right spines
-        ax.spines['top'].set_visible(False)
-        ax.spines['left'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['bottom'].set_position(('data', 0.25))
+        fig.legend(handles=patches, loc='upper right', bbox_to_anchor=(0.95, 0.95), ncol=2, frameon=False)
 
     plt.tight_layout()
     
