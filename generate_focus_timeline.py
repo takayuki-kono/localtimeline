@@ -2,8 +2,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.patches as mpatches
+from matplotlib.colors import to_rgba
 from datetime import datetime, timedelta
 import os
+import numpy as np
 
 # Set Japanese font configuration
 plt.rcParams['font.family'] = 'MS Gothic'
@@ -25,14 +27,10 @@ def get_focus_data(target_date_str=None):
     df['end_time'] = pd.to_datetime(df['end_time'])
 
     if target_date_str is None:
-        # Default to today (or the last recorded date if today is empty? Let's stick to today or provided date)
-        # Using today based on system time
         target_date_str = datetime.now().strftime('%Y-%m-%d')
     
     print(f"Analyzing focus data for: {target_date_str}")
 
-    # Filter data for the target date
-    # We check if the start_time falls on the target date
     target_date = pd.to_datetime(target_date_str).date()
     df['date'] = df['start_time'].dt.date
     day_data = df[df['date'] == target_date].copy()
@@ -44,46 +42,63 @@ def generate_focus_plot():
     
     if df.empty:
         print(f"No focus records found for {date_str}.")
-        # Create an empty plot to show no activity
         fig, ax = plt.subplots(figsize=(12, 3))
         ax.text(0.5, 0.5, f"No focus activity recorded on {date_str}", 
                 ha='center', va='center', fontsize=14)
         ax.set_axis_off()
     else:
+        # Calculate weighted focus time
+        total_weighted_minutes = 0.0
+        
         # Setup plot
         fig, ax = plt.subplots(figsize=(14, 1.5)) # Compact height
         
         # Define colors
-        color_map = {'Focus': '#ff6b6b', 'Break': '#4ecdc4'} # Reddish for Focus, Teal for Break
-        default_color = '#cccccc'
-
-        # Prepare data for broken_barh
-        # We need a list of (start, width) tuples for each category or just iterate rows
+        focus_color_base = '#ff6b6b' # Reddish
+        break_color = '#4ecdc4' # Teal
         
         # Base limits (00:00 to 23:59)
         start_of_day = datetime.strptime(date_str, '%Y-%m-%d')
         end_of_day = start_of_day + timedelta(days=1)
         
-        # Plot bars
-        # y-range is (0, 1) to make it a single bar
         for _, row in df.iterrows():
             start = mdates.date2num(row['start_time'])
             end = mdates.date2num(row['end_time'])
             width = end - start
-            
-            # Ensure width is positive
             if width <= 0: continue
             
             mode = row['mode']
-            color = color_map.get(mode, default_color)
             
+            # Determine color and alpha based on score
+            if mode == 'Focus':
+                score = row.get('score')
+                if pd.isna(score) or score == '':
+                    score = 5 # Default score if missing
+                else:
+                    try:
+                        score = float(score)
+                    except:
+                        score = 5
+                
+                # Calculate alpha: min 0.3, max 1.0 based on score 1-10
+                alpha = 0.3 + (min(max(score, 1), 10) / 10) * 0.7
+                color = to_rgba(focus_color_base, alpha=alpha)
+                
+                # Add to weighted total time (minutes)
+                duration_min = (row['end_time'] - row['start_time']).total_seconds() / 60
+                total_weighted_minutes += duration_min * (score / 10.0)
+                
+            else:
+                color = break_color
+                
             ax.broken_barh([(start, width)], (0.3, 0.4), facecolors=color, edgecolor='white', linewidth=0.5)
 
         # Formatting
         ax.set_ylim(0, 1)
         ax.set_yticks([]) # No y-axis labels
         
-        ax.set_title(f'Focus Timeline: {date_str}', fontsize=14)
+        title_text = f'Focus Timeline: {date_str} (Weighted Focus Time: {int(total_weighted_minutes)} min)'
+        ax.set_title(title_text, fontsize=14)
         ax.set_xlabel('Time', fontsize=10)
         
         # X-axis formatting
@@ -97,18 +112,19 @@ def generate_focus_plot():
         plt.xticks(rotation=0)
         
         # Add Legend
-        patches = [mpatches.Patch(color=color_map['Focus'], label='Focus'),
-                   mpatches.Patch(color=color_map['Break'], label='Break')]
+        # Create a proxy artist for the legend with average color/alpha
+        patches = [mpatches.Patch(color=focus_color_base, label='Focus (Darker=High Score)'),
+                   mpatches.Patch(color=break_color, label='Break')]
         plt.legend(handles=patches, loc='upper right', bbox_to_anchor=(1, 1.4), ncol=2, frameon=False)
 
         # Draw grid for easier reading
         ax.grid(True, axis='x', linestyle='--', alpha=0.5)
 
-        # Remove top/left/right spines for cleaner look
+        # Remove top/left/right spines
         ax.spines['top'].set_visible(False)
         ax.spines['left'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        ax.spines['bottom'].set_position(('data', 0.25)) # Move x-axis closer
+        ax.spines['bottom'].set_position(('data', 0.25))
 
     plt.tight_layout()
     
