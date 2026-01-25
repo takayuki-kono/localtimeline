@@ -6,8 +6,12 @@ screenpipe.zip
 *.md
 !README.md
 *.sqlite
+focus_log.csv
 
 # Python
 __pycache__/
 *.pyc
 .venv/
+
+# Secrets & Local Config
+service_account.json

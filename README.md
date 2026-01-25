@@ -9,6 +9,7 @@ HDD容量を圧迫しないよう、古い録画データは自動削除され�
 - **タイムライン可視化**: 1日のFocus/Break状況を横一本のバーで可視化した画像 `focus_timeline_YYYY-MM-DD.png` を自動生成。
 - **自動掃除**: 24時間を経過した重い動画ファイル(.mp4)を自動削除。
 - **ポモドーロタイマー**: 常に最前面に表示されるタイマー。状態（Focus/Break）がログに記録されます。
+- **Google Sheets同期**: 算出されたWeighted Focus TimeをGoogleスプレッドシートに自動転記します。
 
 ## セットアップ手順
 
@@ -65,6 +66,19 @@ Copy-Item ".\start_screenpipe.bat" "$env:APPDATA\Microsoft\Windows\Start Menu\Pr
 # 例: D:\localtimeline に置いた場合
 schtasks /create /tn "DailyAIDiary" /tr "D:\localtimeline\run_analyze.bat" /sc daily /st 23:55 /f
 ```
+
+### 5. Google Sheets 同期設定（任意）
+Weihted Focus Time（集中時間 × 自己評価）をスプレッドシートに記録する場合の設定です。
+
+1. **Google Cloud Service Accountの取得**:
+   - Google Cloud Consoleでプロジェクトを作成し、Google Sheets APIを有効化。
+   - Service Accountを作成し、JSONキーをダウンロード。
+   - `service_account.json` という名前で `d:\localtimeline\` に配置。
+   - 対象のスプレッドシートの「共有」設定で、Service Accountのメールアドレスに編集権限を付与。
+
+2. **設定ファイルの編集**:
+   - `d:\localtimeline\sheet_config.json` を開き、スプレッドシートIDや列番号を設定してください。
+
 
 ## 使い方
 - **手動でレポート生成**: `run_analyze.bat` をダブルクリック。

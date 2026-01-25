@@ -1,0 +1,10 @@
+{
+    "service_account_path": "d:\\localtimeline\\service_account.json",
+    "spreadsheet_id": "1u9nueXj-65385JvhfUZ-z1xkCAp6zMjNRjFwaSvLESI",
+    "sheet_name": "2026",
+    "date_column_index": 1,
+    "target_column_index": 7,
+    "date_formats": [
+        "%Y/%m/%d"
+    ]
+}
