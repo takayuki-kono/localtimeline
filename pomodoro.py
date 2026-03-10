@@ -11,7 +11,7 @@ class PomodoroTimer:
     def __init__(self, root):
         self.root = root
         self.root.title("Pomodoro")
-        self.root.geometry("200x120")
+        self.root.geometry("200x160") # Slightly taller to accommodate task selection
         self.root.attributes("-topmost", True)
         self.root.configure(bg="#202020")
         
@@ -24,13 +24,33 @@ class PomodoroTimer:
         self.mode = "Focus"
         self.session_start_time = None
         self.pending_end_time = None 
+        self.selected_task = "None"
         
         self.log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "focus_log.csv")
+        self.tasks_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tasks.md")
         self.ensure_log_file()
         
+        # --- Task Selection Frame ---
+        self.frame_task = tk.Frame(root, bg="#202020")
+        
+        tk.Label(self.frame_task, text="Select Task", font=("Segoe UI", 10, "bold"), fg="white", bg="#202020").pack(pady=5)
+        
+        self.task_var = tk.StringVar(root)
+        self.tasks = self.load_tasks()
+        if not self.tasks:
+            self.tasks = ["General"]
+        self.task_var.set(self.tasks[0])
+        
+        self.task_menu = tk.OptionMenu(self.frame_task, self.task_var, *self.tasks)
+        self.task_menu.config(bg="#404040", fg="white", highlightthickness=0)
+        self.task_menu["menu"].config(bg="#404040", fg="white")
+        self.task_menu.pack(pady=5, padx=10, fill="x")
+        
+        tk.Button(self.frame_task, text="Start Focus", command=self.start_focus_with_task, bg="#FF5555", fg="white").pack(pady=10)
+
         # --- Timer Frame ---
         self.frame_timer = tk.Frame(root, bg="#202020")
-        self.frame_timer.pack(fill="both", expand=True)
+        # self.frame_timer.pack(fill="both", expand=True) # Don't pack yet
         
         self.label_status = tk.Label(self.frame_timer, text="FOCUS", font=("Segoe UI", 10, "bold"), fg="#FF5555", bg="#202020")
         self.label_status.pack(pady=(5, 0))
@@ -38,6 +58,9 @@ class PomodoroTimer:
         self.label_time = tk.Label(self.frame_timer, text=self.format_time(self.time_left), font=("Consolas", 32, "bold"), fg="#FFFFFF", bg="#202020")
         self.label_time.pack()
         
+        self.label_task_display = tk.Label(self.frame_timer, text="", font=("Segoe UI", 8), fg="#AAAAAA", bg="#202020")
+        self.label_task_display.pack()
+
         self.label_guide = tk.Label(self.frame_timer, text="[Click: Start/Stop] [R-Click: Reset]", font=("Segoe UI", 7), fg="#888888", bg="#202020")
         self.label_guide.pack(side=tk.BOTTOM, pady=5)
         
@@ -67,27 +90,80 @@ class PomodoroTimer:
                             command=lambda s=i: self.submit_score(s))
             btn.pack(side=tk.LEFT, padx=1)
             
-        self.update_window_title()
+        self.show_task_screen()
         self.update_timer()
 
     def ensure_log_file(self):
-        header = ["start_time", "end_time", "mode", "score"]
+        header = ["start_time", "end_time", "mode", "score", "task"]
         if not os.path.exists(self.log_file):
             with open(self.log_file, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(header)
+        else:
+            # Check if header has 'task'
+            with open(self.log_file, "r", encoding="utf-8") as f:
+                first_line = f.readline().strip()
+                if "task" not in first_line:
+                    print("Updating log file header to include 'task'...")
+                    with open(self.log_file, "r", encoding="utf-8") as f_in:
+                        lines = f_in.readlines()
+                    
+                    lines[0] = ",".join(header) + "\n"
+                    
+                    with open(self.log_file, "w", encoding="utf-8", newline="") as f_out:
+                        f_out.writelines(lines)
+
+    def load_tasks(self):
+        tasks = []
+        if os.path.exists(self.tasks_file):
+            with open(self.tasks_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("- [ ] ") or line.startswith("- [x] "):
+                        task_name = line[6:].strip()
+                        if task_name:
+                            tasks.append(task_name)
+                    elif line.startswith("- ") and not line.startswith("- ["):
+                        task_name = line[2:].strip()
+                        if task_name:
+                            tasks.append(task_name)
+        return tasks
+
+    def show_task_screen(self):
+        self.frame_timer.pack_forget()
+        self.frame_rate.pack_forget()
+        self.frame_task.pack(fill="both", expand=True)
+        # Refresh tasks
+        new_tasks = self.load_tasks()
+        if new_tasks and new_tasks != self.tasks:
+            self.tasks = new_tasks
+            menu = self.task_menu["menu"]
+            menu.delete(0, "end")
+            for task in self.tasks:
+                menu.add_command(label=task, command=lambda value=task: self.task_var.set(value))
+            if self.task_var.get() not in self.tasks:
+                self.task_var.set(self.tasks[0])
 
     def show_timer_screen(self):
+        self.frame_task.pack_forget()
         self.frame_rate.pack_forget()
         self.frame_timer.pack(fill="both", expand=True)
 
     def show_rate_screen(self):
         self.frame_timer.pack_forget()
+        self.frame_task.pack_forget()
         self.frame_rate.pack(fill="both", expand=True)
+
+    def start_focus_with_task(self):
+        self.selected_task = self.task_var.get()
+        self.label_task_display.config(text=f"Task: {self.selected_task}")
+        self.mode = "Focus"
+        self.reset_to_focus()
+        self.toggle_timer() # Start immediately
 
     def submit_score(self, score):
         if self.session_start_time and self.pending_end_time:
-            self.write_log(self.session_start_time, self.pending_end_time, "Focus", score)
+            self.write_log(self.session_start_time, self.pending_end_time, "Focus", score, self.selected_task)
         
         self.session_start_time = None
         self.pending_end_time = None
@@ -97,19 +173,19 @@ class PomodoroTimer:
         self.time_left = self.BREAK_TIME
         self.label_status.config(text="BREAK", fg="#55FF55")
         self.label_time.config(text=self.format_time(self.time_left))
-        
+        self.label_task_display.config(text="")
         self.show_timer_screen()
         self.is_running = False
         self.update_window_title()
 
-    def write_log(self, start, end, mode, score=""):
+    def write_log(self, start, end, mode, score="", task=""):
         try:
             start_str = start.strftime("%Y-%m-%d %H:%M:%S")
             end_str = end.strftime("%Y-%m-%d %H:%M:%S")
             with open(self.log_file, "a", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow([start_str, end_str, mode, score])
-            print(f"Logged: {mode} (Score: {score})")
+                writer.writerow([start_str, end_str, mode, score, task])
+            print(f"Logged: {mode} (Task: {task}, Score: {score})")
         except Exception as e:
             print(f"Log error: {e}")
 
@@ -119,9 +195,15 @@ class PomodoroTimer:
 
     def toggle_timer(self, event=None):
         if not self.is_running:
-            # Start
+            if self.mode == "Focus" and self.session_start_time is None:
+                # If we are in focus mode but haven't started, it might mean we need task selection
+                # But start_focus_with_task handles the start.
+                # If the user clicks the label in stopped state, just start.
+                pass
+            
             self.is_running = True
-            self.session_start_time = datetime.now()
+            if self.session_start_time is None:
+                self.session_start_time = datetime.now()
         else:
             # Stop
             self.is_running = False
@@ -133,9 +215,22 @@ class PomodoroTimer:
             else:
                 self.write_log(self.session_start_time, end_time, "Break")
                 self.session_start_time = None
-                self.reset_to_focus()
+                self.reset_to_task_selection()
             
         self.update_window_title()
+
+    def reset_to_task_selection(self):
+        self.is_running = False
+        self.mode = "Focus"
+        self.time_left = self.FOCUS_TIME
+        self.label_status.config(text="FOCUS", fg="#FF5555")
+        self.label_time.config(text=self.format_time(self.time_left))
+        self.show_task_screen()
+        # 前タスクの次のインデックスを自動選択（最後の次は先頭にループ）
+        if self.tasks and self.selected_task in self.tasks:
+            idx = self.tasks.index(self.selected_task)
+            next_idx = (idx + 1) % len(self.tasks)
+            self.task_var.set(self.tasks[next_idx])
 
     def reset_to_focus(self):
         self.is_running = False
@@ -148,7 +243,7 @@ class PomodoroTimer:
     def reset_timer(self, event=None):
         self.is_running = False
         self.session_start_time = None
-        self.reset_to_focus()
+        self.reset_to_task_selection()
         self.update_window_title()
 
     def play_sound(self, mode):
@@ -186,7 +281,7 @@ class PomodoroTimer:
             
             self.write_log(self.session_start_time, end_time, "Break")
             self.session_start_time = None
-            self.reset_to_focus()
+            self.reset_to_task_selection()
         
         self.update_window_title()
 
