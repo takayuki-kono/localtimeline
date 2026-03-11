@@ -15,7 +15,7 @@ class PomodoroTimer:
         self.root.attributes("-topmost", True)
         self.root.configure(bg="#202020")
         
-        # 設定 (秒)
+        # 設定 (秒) … tasks.md から上書きされる
         self.FOCUS_TIME = 25 * 60
         self.BREAK_TIME = 5 * 60
         
@@ -27,8 +27,9 @@ class PomodoroTimer:
         self.selected_task = "None"
         
         self.log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "focus_log.csv")
-        self.tasks_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tasks.md")
+        self.settings_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tasks.md")
         self.ensure_log_file()
+        self._apply_settings()
         
         # --- Task Selection Frame ---
         self.frame_task = tk.Frame(root, bg="#202020")
@@ -113,10 +114,30 @@ class PomodoroTimer:
                     with open(self.log_file, "w", encoding="utf-8", newline="") as f_out:
                         f_out.writelines(lines)
 
+    def _apply_settings(self):
+        """tasks.md の focus_minutes / break_minutes を読み込み、FOCUS_TIME / BREAK_TIME を更新する。"""
+        focus_min, break_min = 25, 5
+        if os.path.exists(self.settings_file):
+            with open(self.settings_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("focus_minutes:"):
+                        try:
+                            focus_min = max(1, int(line.split(":", 1)[1].strip()))
+                        except ValueError:
+                            pass
+                    elif line.startswith("break_minutes:"):
+                        try:
+                            break_min = max(0, int(line.split(":", 1)[1].strip()))
+                        except ValueError:
+                            pass
+        self.FOCUS_TIME = focus_min * 60
+        self.BREAK_TIME = break_min * 60
+
     def load_tasks(self):
         tasks = []
-        if os.path.exists(self.tasks_file):
-            with open(self.tasks_file, "r", encoding="utf-8") as f:
+        if os.path.exists(self.settings_file):
+            with open(self.settings_file, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line.startswith("- [ ] ") or line.startswith("- [x] "):
@@ -133,6 +154,7 @@ class PomodoroTimer:
         self.frame_timer.pack_forget()
         self.frame_rate.pack_forget()
         self.frame_task.pack(fill="both", expand=True)
+        self._apply_settings()  # 設定ファイルの変更を反映
         # Refresh tasks
         new_tasks = self.load_tasks()
         if new_tasks and new_tasks != self.tasks:
@@ -155,6 +177,7 @@ class PomodoroTimer:
         self.frame_rate.pack(fill="both", expand=True)
 
     def start_focus_with_task(self):
+        self._apply_settings()
         self.selected_task = self.task_var.get()
         self.label_task_display.config(text=f"Task: {self.selected_task}")
         self.mode = "Focus"
@@ -170,6 +193,7 @@ class PomodoroTimer:
         
         # 評価完了後、Breakモードへ (待機状態)
         self.mode = "Break"
+        self._apply_settings()
         self.time_left = self.BREAK_TIME
         self.label_status.config(text="BREAK", fg="#55FF55")
         self.label_time.config(text=self.format_time(self.time_left))
