@@ -26,8 +26,10 @@ class PomodoroTimer:
         self.pending_end_time = None 
         self.selected_task = "None"
         
-        self.log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "focus_log.csv")
-        self.settings_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tasks.md")
+        self._script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.log_file = os.path.join(self._script_dir, "focus_log.csv")
+        self.settings_file = os.path.join(self._script_dir, "tasks.md")
+        self.break_wav_path = os.path.join(self._script_dir, "1kHz40Hz10min.wav")
         self.ensure_log_file()
         self._apply_settings()
         
@@ -177,6 +179,7 @@ class PomodoroTimer:
         self.frame_rate.pack(fill="both", expand=True)
 
     def start_focus_with_task(self):
+        self._stop_break_audio()
         self._apply_settings()
         self.selected_task = self.task_var.get()
         self.label_task_display.config(text=f"Task: {self.selected_task}")
@@ -217,6 +220,17 @@ class PomodoroTimer:
         m, s = divmod(seconds, 60)
         return f"{m:02d}:{s:02d}"
 
+    def _stop_break_audio(self):
+        winsound.PlaySound(None, winsound.SND_PURGE)
+
+    def _start_break_audio(self):
+        if not os.path.isfile(self.break_wav_path):
+            return
+        winsound.PlaySound(
+            self.break_wav_path,
+            winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP,
+        )
+
     def toggle_timer(self, event=None):
         if not self.is_running:
             if self.mode == "Focus" and self.session_start_time is None:
@@ -228,6 +242,8 @@ class PomodoroTimer:
             self.is_running = True
             if self.session_start_time is None:
                 self.session_start_time = datetime.now()
+            if self.mode == "Break":
+                self._start_break_audio()
         else:
             # Stop
             self.is_running = False
@@ -237,6 +253,7 @@ class PomodoroTimer:
                 self.pending_end_time = end_time
                 self.show_rate_screen()
             else:
+                self._stop_break_audio()
                 self.write_log(self.session_start_time, end_time, "Break")
                 self.session_start_time = None
                 self.reset_to_task_selection()
@@ -244,6 +261,7 @@ class PomodoroTimer:
         self.update_window_title()
 
     def reset_to_task_selection(self):
+        self._stop_break_audio()
         self.is_running = False
         self.mode = "Focus"
         self.time_left = self.FOCUS_TIME
@@ -267,6 +285,7 @@ class PomodoroTimer:
     def reset_timer(self, event=None):
         self.is_running = False
         self.session_start_time = None
+        self._stop_break_audio()
         self.reset_to_task_selection()
         self.update_window_title()
 
@@ -287,6 +306,8 @@ class PomodoroTimer:
     def switch_mode(self):
         self.is_running = False
         end_time = datetime.now()
+        if self.mode == "Break":
+            self._stop_break_audio()
         self.play_sound(self.mode)
 
         # 最前面に持ってくる
