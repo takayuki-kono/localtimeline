@@ -5,8 +5,13 @@ screenpipe.zip
 # Personal Data / Reports
 *.md
 !README.md
+!docs/
+!docs/*.md
 *.sqlite
 focus_log.csv
+
+# Large local audio (GitHub 100MB limit; keep on disk only)
+1kHz40Hz10min.wav
 
 # Python
 __pycache__/
