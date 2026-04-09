@@ -29,7 +29,7 @@ class PomodoroTimer:
         self._script_dir = os.path.dirname(os.path.abspath(__file__))
         self.log_file = os.path.join(self._script_dir, "focus_log.csv")
         self.settings_file = os.path.join(self._script_dir, "tasks.md")
-        self.break_wav_path = os.path.join(self._script_dir, "1kHz40Hz1min.wav")
+        self.break_wav_path = os.path.join(self._script_dir, "3kHz40Hz1min.wav")
         self.ensure_log_file()
         self._apply_settings()
         
