@@ -12,7 +12,7 @@ class PomodoroTimer:
     def __init__(self, root):
         self.root = root
         self.root.title("Pomodoro")
-        self.root.geometry("220x220")  # task + break sound dropdowns
+        self.root.geometry("220x240")  # timer に休憩の音プルダウンを載せる余地
         self.root.attributes("-topmost", True)
         self.root.configure(bg="#202020")
         
@@ -52,17 +52,6 @@ class PomodoroTimer:
         self.task_menu["menu"].config(bg="#404040", fg="white")
         self.task_menu.pack(pady=5, padx=10, fill="x")
 
-        tk.Label(self.frame_task, text="休憩の音", font=("Segoe UI", 9), fg="white", bg="#202020").pack(pady=(4, 0))
-        self.break_sound_var = tk.StringVar(root)
-        self.break_sound_var.set(self._break_sound_default_label)
-        _bs_labels = [o["label"] for o in self._break_sound_options]
-        if self.break_sound_var.get() not in _bs_labels:
-            self.break_sound_var.set(_bs_labels[0])
-        self.break_sound_menu = tk.OptionMenu(self.frame_task, self.break_sound_var, *_bs_labels)
-        self.break_sound_menu.config(bg="#404040", fg="white", highlightthickness=0)
-        self.break_sound_menu["menu"].config(bg="#404040", fg="white")
-        self.break_sound_menu.pack(pady=4, padx=10, fill="x")
-
         tk.Button(self.frame_task, text="Start Focus", command=self.start_focus_with_task, bg="#FF5555", fg="white").pack(pady=10)
 
         # --- Timer Frame ---
@@ -71,7 +60,20 @@ class PomodoroTimer:
         
         self.label_status = tk.Label(self.frame_timer, text="FOCUS", font=("Segoe UI", 10, "bold"), fg="#FF5555", bg="#202020")
         self.label_status.pack(pady=(5, 0))
-        
+
+        self.frame_break_row = tk.Frame(self.frame_timer, bg="#202020")
+        tk.Label(self.frame_break_row, text="休憩の音", font=("Segoe UI", 8), fg="white", bg="#202020").pack(anchor="w")
+        self.break_sound_var = tk.StringVar(root)
+        self.break_sound_var.set(self._break_sound_default_label)
+        _bs_labels = [o["label"] for o in self._break_sound_options]
+        if self.break_sound_var.get() not in _bs_labels:
+            self.break_sound_var.set(_bs_labels[0])
+        self.break_sound_menu = tk.OptionMenu(self.frame_break_row, self.break_sound_var, *_bs_labels)
+        self.break_sound_menu.config(bg="#404040", fg="white", highlightthickness=0)
+        self.break_sound_menu["menu"].config(bg="#404040", fg="white")
+        self.break_sound_menu.pack(fill="x")
+        self.break_sound_var.trace_add("write", self._on_break_sound_var_changed)
+
         self.label_time = tk.Label(self.frame_timer, text=self.format_time(self.time_left), font=("Consolas", 32, "bold"), fg="#FFFFFF", bg="#202020")
         self.label_time.pack()
         
@@ -175,6 +177,11 @@ class PomodoroTimer:
         if self.break_sound_var.get() not in labels:
             self.break_sound_var.set(default_lbl)
 
+    def _on_break_sound_var_changed(self, *_args):
+        if self.mode == "Break" and self.is_running:
+            self._stop_break_audio()
+            self._start_break_audio()
+
     def _break_wav_path_for_selection(self):
         label = self.break_sound_var.get()
         fn = self._break_sound_label_to_file.get(label)
@@ -223,7 +230,6 @@ class PomodoroTimer:
         self.frame_rate.pack_forget()
         self.frame_task.pack(fill="both", expand=True)
         self._apply_settings()  # 設定ファイルの変更を反映
-        self._refresh_break_sound_from_disk()
         # Refresh tasks
         new_tasks = self.load_tasks()
         if new_tasks and new_tasks != self.tasks:
@@ -239,6 +245,12 @@ class PomodoroTimer:
         self.frame_task.pack_forget()
         self.frame_rate.pack_forget()
         self.frame_timer.pack(fill="both", expand=True)
+        if self.mode == "Break":
+            self._refresh_break_sound_from_disk()
+            self.frame_break_row.pack_forget()
+            self.frame_break_row.pack(after=self.label_status, fill="x", padx=10, pady=(0, 4))
+        else:
+            self.frame_break_row.pack_forget()
 
     def show_rate_screen(self):
         self.frame_timer.pack_forget()
