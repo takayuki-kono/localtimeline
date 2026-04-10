@@ -3,8 +3,13 @@
     "spreadsheet_id": "1u9nueXj-65385JvhfUZ-z1xkCAp6zMjNRjFwaSvLESI",
     "sheet_name": "2026",
     "date_column_index": 1,
-    "target_column_index": 7,
+    "target_column_index": 15,
     "date_formats": [
         "%Y/%m/%d"
+    ],
+    "break_sound_options": [
+        { "label": "無音（再生なし）", "file": null },
+        { "label": "3kHz40Hz1min", "file": "3kHz40Hz1min.wav" },
+        { "label": "1kHz40Hz1min", "file": "1kHz40Hz1min.wav" }
     ]
 }

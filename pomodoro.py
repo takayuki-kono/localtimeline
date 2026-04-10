@@ -4,6 +4,7 @@ import time
 import winsound
 import threading
 import csv
+import json
 import os
 from datetime import datetime
 
@@ -11,7 +12,7 @@ class PomodoroTimer:
     def __init__(self, root):
         self.root = root
         self.root.title("Pomodoro")
-        self.root.geometry("200x160") # Slightly taller to accommodate task selection
+        self.root.geometry("220x220")  # task + break sound dropdowns
         self.root.attributes("-topmost", True)
         self.root.configure(bg="#202020")
         
@@ -29,7 +30,9 @@ class PomodoroTimer:
         self._script_dir = os.path.dirname(os.path.abspath(__file__))
         self.log_file = os.path.join(self._script_dir, "focus_log.csv")
         self.settings_file = os.path.join(self._script_dir, "tasks.md")
-        self.break_wav_path = os.path.join(self._script_dir, "3kHz40Hz1min.wav")
+        self._sheet_config_path = os.path.join(self._script_dir, "sheet_config.json")
+        self._break_sound_options, self._break_sound_default_label = self._parse_break_sound_from_config()
+        self._break_sound_label_to_file = {o["label"]: o["file"] for o in self._break_sound_options}
         self.ensure_log_file()
         self._apply_settings()
         
@@ -48,7 +51,18 @@ class PomodoroTimer:
         self.task_menu.config(bg="#404040", fg="white", highlightthickness=0)
         self.task_menu["menu"].config(bg="#404040", fg="white")
         self.task_menu.pack(pady=5, padx=10, fill="x")
-        
+
+        tk.Label(self.frame_task, text="休憩の音", font=("Segoe UI", 9), fg="white", bg="#202020").pack(pady=(4, 0))
+        self.break_sound_var = tk.StringVar(root)
+        self.break_sound_var.set(self._break_sound_default_label)
+        _bs_labels = [o["label"] for o in self._break_sound_options]
+        if self.break_sound_var.get() not in _bs_labels:
+            self.break_sound_var.set(_bs_labels[0])
+        self.break_sound_menu = tk.OptionMenu(self.frame_task, self.break_sound_var, *_bs_labels)
+        self.break_sound_menu.config(bg="#404040", fg="white", highlightthickness=0)
+        self.break_sound_menu["menu"].config(bg="#404040", fg="white")
+        self.break_sound_menu.pack(pady=4, padx=10, fill="x")
+
         tk.Button(self.frame_task, text="Start Focus", command=self.start_focus_with_task, bg="#FF5555", fg="white").pack(pady=10)
 
         # --- Timer Frame ---
@@ -116,6 +130,58 @@ class PomodoroTimer:
                     with open(self.log_file, "w", encoding="utf-8", newline="") as f_out:
                         f_out.writelines(lines)
 
+    def _parse_break_sound_from_config(self):
+        """sheet_config.json の break_sound_options を読む。失敗時は無音のみ。"""
+        fallback = [{"label": "無音（再生なし）", "file": None}]
+        if not os.path.isfile(self._sheet_config_path):
+            return fallback, fallback[0]["label"]
+        try:
+            with open(self._sheet_config_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return fallback, fallback[0]["label"]
+        raw = cfg.get("break_sound_options")
+        if not isinstance(raw, list) or not raw:
+            return fallback, fallback[0]["label"]
+        normalized = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            label = item.get("label")
+            if label is None or not str(label).strip():
+                continue
+            label = str(label).strip()
+            file_val = item.get("file")
+            if file_val is None or (isinstance(file_val, str) and not file_val.strip()):
+                normalized.append({"label": label, "file": None})
+            else:
+                normalized.append({"label": label, "file": str(file_val).strip()})
+        if not normalized:
+            return fallback, fallback[0]["label"]
+        silent = [o["label"] for o in normalized if o["file"] is None]
+        default_lbl = silent[0] if silent else normalized[0]["label"]
+        return normalized, default_lbl
+
+    def _refresh_break_sound_from_disk(self):
+        options, default_lbl = self._parse_break_sound_from_config()
+        self._break_sound_options = options
+        self._break_sound_label_to_file = {o["label"]: o["file"] for o in options}
+        self._break_sound_default_label = default_lbl
+        labels = [o["label"] for o in options]
+        menu = self.break_sound_menu["menu"]
+        menu.delete(0, "end")
+        for lbl in labels:
+            menu.add_command(label=lbl, command=lambda v=lbl: self.break_sound_var.set(v))
+        if self.break_sound_var.get() not in labels:
+            self.break_sound_var.set(default_lbl)
+
+    def _break_wav_path_for_selection(self):
+        label = self.break_sound_var.get()
+        fn = self._break_sound_label_to_file.get(label)
+        if not fn:
+            return None
+        return os.path.join(self._script_dir, fn)
+
     def _apply_settings(self):
         """tasks.md の focus_minutes / break_minutes を読み込み、FOCUS_TIME / BREAK_TIME を更新する。"""
         focus_min, break_min = 25, 5
@@ -157,6 +223,7 @@ class PomodoroTimer:
         self.frame_rate.pack_forget()
         self.frame_task.pack(fill="both", expand=True)
         self._apply_settings()  # 設定ファイルの変更を反映
+        self._refresh_break_sound_from_disk()
         # Refresh tasks
         new_tasks = self.load_tasks()
         if new_tasks and new_tasks != self.tasks:
@@ -224,10 +291,11 @@ class PomodoroTimer:
         winsound.PlaySound(None, winsound.SND_PURGE)
 
     def _start_break_audio(self):
-        if not os.path.isfile(self.break_wav_path):
+        path = self._break_wav_path_for_selection()
+        if not path or not os.path.isfile(path):
             return
         winsound.PlaySound(
-            self.break_wav_path,
+            path,
             winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP,
         )
 
