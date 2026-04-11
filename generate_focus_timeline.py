@@ -27,7 +27,13 @@ def get_focus_data(target_date_str=None):
     df['end_time'] = pd.to_datetime(df['end_time'])
 
     if target_date_str is None:
-        target_date_str = datetime.now().strftime('%Y-%m-%d')
+        import sys
+        if len(sys.argv) > 1:
+            target_date_str = sys.argv[1]
+        elif not df.empty:
+            target_date_str = df['start_time'].max().strftime('%Y-%m-%d')
+        else:
+            target_date_str = datetime.now().strftime('%Y-%m-%d')
     
     print(f"Analyzing focus data for: {target_date_str}")
 

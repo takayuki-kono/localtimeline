@@ -81,9 +81,9 @@ Weihted Focus Time（集中時間 × 自己評価）をスプレッドシート�
 
 
 ## 使い方
-- **手動でレポート生成**: `run_analyze.bat` をダブルクリック。
+- **手動でレポート生成**: `analyze.bat` をダブルクリック。
   - 同じフォルダに `report_YYYY-MM-DD.md` と `focus_timeline_YYYY-MM-DD.png` が作成されます。
-- **手動でタイムライン画像のみ生成**: `run_generate_focus_timeline.bat` をダブルクリック。
+- **手動でタイムライン画像のみ生成**: コマンドプロンプトから `python generate_focus_timeline.py [YYYY-MM-DD]` を実行することで、特定の日付の画像を生成できます（引数省略時は最新のログ日付）。
 - **手動で記録開始**: `start_screenpipe.bat` をダブルクリック。
 - **ポモドーロタイマー**: `start_pomodoro.bat` をダブルクリック。
   - **左クリック**: スタート / 一時停止
