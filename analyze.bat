@@ -1,24 +1,41 @@
 @echo off
 cd /d "%~dp0"
 
+setlocal enableextensions
+
+rem Prefer Python launcher (task scheduler PATH-safe)
+set "PY=python"
+where py >nul 2>nul && set "PY=py -3"
+
 echo ==========================================
 echo Starting Usage Analysis...
-python analyze_usage.py
+%PY% analyze_usage.py
+if errorlevel 1 goto :error
 
 echo ==========================================
 echo Generating Timeline Images...
-python generate_timeline.py
-python generate_focus_timeline.py
+%PY% generate_timeline.py
+if errorlevel 1 goto :error
+%PY% process_focus_outputs.py
+if errorlevel 1 goto :error
 
 echo ==========================================
 echo Syncing Focus Time to Sheets...
-python sync_focus_to_sheet.py
+echo (Handled by process_focus_outputs.py)
 
 echo ==========================================
 echo Generating Diary (in D:\tendency)...
 cd /d "D:\tendency"
-python generate_diary.py
+%PY% generate_diary.py
+if errorlevel 1 goto :error
 
 echo ==========================================
 echo Analysis Workflow Complete.
 pause
+exit /b 0
+
+:error
+echo.
+echo [ERROR] analyze.bat failed. Please check the output above.
+pause
+exit /b 1

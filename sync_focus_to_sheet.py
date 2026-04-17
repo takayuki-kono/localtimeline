@@ -25,7 +25,7 @@ def load_config():
 def sync_focus_time(target_date_str=None):
     config = load_config()
     if not config:
-        return
+        return False
 
     # Extract config
     service_account_path = config.get('service_account_path', 'service_account.json')
@@ -38,7 +38,7 @@ def sync_focus_time(target_date_str=None):
     # Validate essential config
     if not spreadsheet_id or spreadsheet_id == "YOUR_SPREADSHEET_ID_HERE":
         print("Error: Please set your 'spreadsheet_id' in sheet_config.json")
-        return
+        return False
 
     if target_date_str is None:
         target_date_str = datetime.now().strftime('%Y-%m-%d')
@@ -50,7 +50,7 @@ def sync_focus_time(target_date_str=None):
     if not os.path.exists(service_account_path):
         print(f"Error: Service account JSON file not found at: {service_account_path}")
         print("Please check the 'service_account_path' in your config file.")
-        return
+        return False
 
     try:
         print("Connecting to Google Sheets...")
@@ -86,11 +86,14 @@ def sync_focus_time(target_date_str=None):
             print(f"Found date at row {target_row}. Updating column {target_col_idx}...")
             sheet.update_cell(target_row, target_col_idx, int(weighted_time))
             print("Update successful!")
+            return True
         else:
             print(f"Date {target_date_str} not found in column {date_col_idx}.")
+            return False
             
     except Exception as e:
         print(f"Error syncing to Google Sheet: {e}")
+        return False
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

@@ -20,3 +20,7 @@ __pycache__/
 
 # Secrets & Local Config
 service_account.json
+
+# Local state (processed dates)
+focus_output_state.json
+.localtimeline_state.json
