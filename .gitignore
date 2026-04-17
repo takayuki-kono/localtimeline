@@ -23,4 +23,7 @@ service_account.json
 
 # Local state (processed dates)
 focus_output_state.json
+
+# Local state (processed dates)
+focus_output_state.json
 .localtimeline_state.json
