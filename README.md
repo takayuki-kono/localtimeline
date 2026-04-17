@@ -6,7 +6,7 @@ HDD容量を圧迫しないよう、古い録画データは自動削除され�
 ## 機能
 - **自動記録**: PC起動時にバックグラウンドでScreenpipeを起動。
 - **日次レポート**: 毎日指定時刻に活動ログを集計し、`report_YYYY-MM-DD.md` を生成。
-- **タイムライン可視化**: 1日のFocus/Break状況を横一本のバーで可視化した画像 `focus_timeline_YYYY-MM-DD.png` を自動生成。
+- **タイムライン可視化**: 1日のFocus/Break状況を画像 `focus_timeline_YYYY-MM-DD.png` として自動生成。Focusは**タスク別に色分け**され、濃さでスコア（自己評価）を表します。
 - **自動掃除**: 24時間を経過した重い動画ファイル(.mp4)を自動削除。
 - **ポモドーロタイマー**: 常に最前面に表示されるタイマー。状態（Focus/Break）がログに記録されます。
 - **Google Sheets同期**: 算出されたWeighted Focus TimeをGoogleスプレッドシートに自動転記します。

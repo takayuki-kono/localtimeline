@@ -6,9 +6,48 @@ from matplotlib.colors import to_rgba
 from datetime import datetime, timedelta
 import os
 import numpy as np
+import hashlib
 
 # Set Japanese font configuration
 plt.rcParams['font.family'] = 'MS Gothic'
+
+def _normalize_task_name(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and pd.isna(value):
+        return ""
+    return str(value).strip()
+
+def _task_to_base_color(task_name: str):
+    """
+    Deterministic vivid-ish color per task.
+    Return RGB tuple in 0-1 floats.
+    """
+    name = task_name or "(No Task)"
+    h = hashlib.md5(name.encode("utf-8")).hexdigest()
+    # 0..359
+    hue = (int(h[:8], 16) % 360) / 360.0
+    # keep readable / vivid
+    sat = 0.72
+    val = 0.95
+    r, g, b = plt.cm.hsv(hue)[:3]
+    # plt.cm.hsv already gives vivid rainbow; apply sat/val-ish tweak by mixing with white/black
+    # move towards target "val" by blending with white
+    r = r * sat + (1 - sat) * 1.0
+    g = g * sat + (1 - sat) * 1.0
+    b = b * sat + (1 - sat) * 1.0
+    r = r * val
+    g = g * val
+    b = b * val
+    return (r, g, b)
+
+def _shorten_task_label(task_name: str, max_len: int = 14) -> str:
+    s = (task_name or "").strip()
+    if not s:
+        return "No Task"
+    if len(s) <= max_len:
+        return s
+    return s[: max(0, max_len - 1)] + "…"
 
 def get_focus_data(target_date_str=None):
     log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "focus_log.csv")
@@ -61,7 +100,6 @@ def generate_focus_plot_for_date(date_str: str):
         plt.subplots_adjust(hspace=0.6) # Add space between rows
         
         # Define colors
-        focus_color_base = '#FF1493' # Passion Pink (DeepPink)
         break_color = '#4ecdc4' # Teal
         
         start_of_day = datetime.strptime(date_str, '%Y-%m-%d')
@@ -71,6 +109,16 @@ def generate_focus_plot_for_date(date_str: str):
 
         # Pre-calculate data styles to avoid repetition
         plot_data = []
+        # Build task -> base color map (only tasks appearing in Focus rows)
+        if "task" in df.columns:
+            focus_tasks = [
+                _normalize_task_name(v) for v in df.loc[df["mode"] == "Focus", "task"].tolist()
+            ]
+        else:
+            focus_tasks = []
+        task_names = sorted({t if t else "(No Task)" for t in focus_tasks})
+        task_to_color = {t: _task_to_base_color(t) for t in task_names}
+
         for _, row in df.iterrows():
             start = mdates.date2num(row['start_time'])
             end = mdates.date2num(row['end_time'])
@@ -90,14 +138,22 @@ def generate_focus_plot_for_date(date_str: str):
                         score = 5
                 
                 alpha = 0.3 + (min(max(score, 1), 10) / 10) * 0.7
-                color = to_rgba(focus_color_base, alpha=alpha)
+                raw_task = row.get("task") if "task" in row else ""
+                task_name = _normalize_task_name(raw_task) or "(No Task)"
+                base_rgb = task_to_color.get(task_name) or _task_to_base_color(task_name)
+                color = (base_rgb[0], base_rgb[1], base_rgb[2], alpha)
                 
                 duration_min = (row['end_time'] - row['start_time']).total_seconds() / 60
                 total_weighted_minutes += duration_min * (score / 10.0)
             else:
                 color = break_color
             
-            plot_data.append((start, width, color))
+            # Store label only for focus segments
+            label = ""
+            if mode == "Focus":
+                raw_task = row.get("task") if "task" in row else ""
+                label = _shorten_task_label(_normalize_task_name(raw_task))
+            plot_data.append((start, width, color, mode, label))
 
         # Plot for each time block
         for i, ax in enumerate(axes):
@@ -106,8 +162,23 @@ def generate_focus_plot_for_date(date_str: str):
             block_end = start_of_day + timedelta(hours=end_hour)
             
             # Plot all data (clipping will handle visibility)
-            for start, width, color in plot_data:
+            for start, width, color, mode, label in plot_data:
                 ax.broken_barh([(start, width)], (0.3, 0.4), facecolors=color, edgecolor='white', linewidth=0.5)
+                # Put task label inside longer focus segments
+                if mode == "Focus" and label:
+                    duration_minutes = width * 24 * 60
+                    if duration_minutes >= 20:
+                        x = start + (width / 2.0)
+                        ax.text(
+                            x,
+                            0.5,
+                            label,
+                            ha="center",
+                            va="center",
+                            fontsize=9,
+                            color="black",
+                            clip_on=True,
+                        )
             
             # Formatting
             ax.set_ylim(0, 1)
@@ -140,9 +211,25 @@ def generate_focus_plot_for_date(date_str: str):
         fig.suptitle(title_text, fontsize=16, y=0.95)
         
         # Legend
-        patches = [mpatches.Patch(color=focus_color_base, label='Focus (Darker=High Score)'),
-                   mpatches.Patch(color=break_color, label='Break')]
-        fig.legend(handles=patches, loc='upper right', bbox_to_anchor=(0.95, 0.95), ncol=2, frameon=False)
+        legend_handles = [mpatches.Patch(color=break_color, label="Break")]
+        for t in task_names:
+            legend_handles.append(mpatches.Patch(color=task_to_color[t], label=t))
+
+        # Place legend outside to keep plot readable; wrap into multiple columns when many tasks
+        ncol = 1
+        if len(legend_handles) >= 6:
+            ncol = 2
+        if len(legend_handles) >= 11:
+            ncol = 3
+
+        fig.legend(
+            handles=legend_handles,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.995),
+            ncol=ncol,
+            frameon=False,
+            fontsize=9,
+        )
 
     plt.tight_layout()
     
