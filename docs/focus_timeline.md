@@ -43,3 +43,16 @@
 - `focus_timeline_YYYY-MM-DD.png`
 - タイトルに `Weighted Focus Time`（分）を表示する（既存仕様）
 
+## 再処理ポリシー（`focus_output_state.json`）
+
+`process_focus_outputs.py` は、`focus_log.csv` にデータがある日付について画像生成と Sheets 記入を行い、結果を `focus_output_state.json` に記録する。再処理可否の判定ルール:
+
+- 対象日付 `D` のエントリが state に **存在しない** → 処理対象
+- エントリが存在し、`timeline` と `sheet` の両方が `true` でも、**`updated_at` の日付が `D` 以前（`<= D`）** の場合は **未確定とみなして再処理**する
+  - 例: `D = 2026-04-20` / `updated_at = 2026-04-20T11:14:19` → その日の途中に処理された値なので再処理
+  - 例: `D = 2026-04-20` / `updated_at = 2026-04-19T...` → 前日に処理された値（本来ありえないが）なので再処理
+- `updated_at` の日付が **`D` より後（`> D`）** の場合のみスキップ（= 翌日以降に確定した値として扱う）
+- `updated_at` が壊れている／パースできない場合も **再処理**する
+
+この仕様により、日中に一度処理されたあとに追記された Focus/Break が翌日以降の `analyze.bat` 実行で取り込み直される。
+
