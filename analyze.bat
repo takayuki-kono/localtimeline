@@ -1,24 +1,19 @@
 @echo off
+rem Manual entry point. Delegates real work to run_analyze.bat
+rem and pauses at the end so the user can read the output.
 cd /d "%~dp0"
 
-setlocal enableextensions
+call "%~dp0run_analyze.bat"
+set "RC=%errorlevel%"
 
-rem Prefer Python launcher (task scheduler PATH-safe)
-set "PY=python"
-where py >nul 2>nul && set "PY=py -3"
+if not "%RC%"=="0" (
+    echo.
+    echo [ERROR] analyze.bat failed (exit=%RC%). Please check the output above.
+    pause
+    exit /b %RC%
+)
 
-echo ==========================================
-echo Generating Focus Timeline Images and Syncing to Sheets...
-%PY% process_focus_outputs.py
-if errorlevel 1 goto :error
-
-echo ==========================================
+echo.
 echo Analysis Workflow Complete.
 pause
 exit /b 0
-
-:error
-echo.
-echo [ERROR] analyze.bat failed. Please check the output above.
-pause
-exit /b 1

@@ -56,3 +56,16 @@
 
 この仕様により、日中に一度処理されたあとに追記された Focus/Break が翌日以降の `analyze.bat` 実行で取り込み直される。
 
+## 日次自動実行（タスクスケジューラ）
+
+- 無人実行用の **`run_analyze.bat`** をタスクスケジューラから呼ぶ想定。
+  - `run_analyze.bat` は **`pause` を含めない**（入力待ちで止まらない）。
+  - 内部で `process_focus_outputs.py` を実行するだけ（= focus timeline 出力 + Sheets 同期）。
+- 手動実行用の **`analyze.bat`** は `run_analyze.bat` を呼び、末尾に `pause` を付けて結果を確認できるようにする。
+- タスクスケジューラ登録例（毎日 23:55）:
+  - `schtasks /create /tn "DailyAIDiary" /tr "D:\localtimeline\run_analyze.bat" /sc daily /st 23:55 /f`
+- 注意:
+  - ノートPC のバッテリー運用では標準設定だと走らない場合があるので、スケジューラの電源オプションを確認すること。
+  - 23:55 の時点でまだ当日の Focus が続いている場合でも、翌日の実行時に **再処理ポリシー（案C）**で取り込み直される（`updated_at` が当日のままなら再処理対象）。
+
+
