@@ -2,7 +2,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.patches as mpatches
-from matplotlib.colors import to_rgba
 from datetime import datetime, timedelta
 import os
 import numpy as np
@@ -101,6 +100,8 @@ def generate_focus_plot_for_date(date_str: str):
         
         # Define colors
         break_color = '#4ecdc4' # Teal
+        bar_base_y = 0.3
+        bar_max_height = 0.4
         
         start_of_day = datetime.strptime(date_str, '%Y-%m-%d')
         
@@ -136,24 +137,28 @@ def generate_focus_plot_for_date(date_str: str):
                         score = float(score)
                     except:
                         score = 5
-                
-                alpha = 0.3 + (min(max(score, 1), 10) / 10) * 0.7
+                score = min(max(score, 1), 10)
+
                 raw_task = row.get("task") if "task" in row else ""
                 task_name = _normalize_task_name(raw_task) or "(No Task)"
                 base_rgb = task_to_color.get(task_name) or _task_to_base_color(task_name)
-                color = (base_rgb[0], base_rgb[1], base_rgb[2], alpha)
-                
+                color = base_rgb
+                bar_height = (score / 10.0) * bar_max_height
+                bar_y = bar_base_y
+
                 duration_min = (row['end_time'] - row['start_time']).total_seconds() / 60
                 total_weighted_minutes += duration_min * (score / 10.0)
             else:
                 color = break_color
+                bar_height = bar_max_height
+                bar_y = bar_base_y
             
             # Store label only for focus segments
             label = ""
             if mode == "Focus":
                 raw_task = row.get("task") if "task" in row else ""
                 label = _shorten_task_label(_normalize_task_name(raw_task))
-            plot_data.append((start, width, color, mode, label))
+            plot_data.append((start, width, color, mode, label, bar_y, bar_height))
 
         # Plot for each time block
         for i, ax in enumerate(axes):
@@ -162,8 +167,8 @@ def generate_focus_plot_for_date(date_str: str):
             block_end = start_of_day + timedelta(hours=end_hour)
             
             # Plot all data (clipping will handle visibility)
-            for start, width, color, mode, label in plot_data:
-                ax.broken_barh([(start, width)], (0.3, 0.4), facecolors=color, edgecolor='white', linewidth=0.5)
+            for start, width, color, mode, label, bar_y, bar_height in plot_data:
+                ax.broken_barh([(start, width)], (bar_y, bar_height), facecolors=color, edgecolor='white', linewidth=0.5)
                 # Put task label inside longer focus segments
                 if mode == "Focus" and label:
                     duration_minutes = width * 24 * 60
@@ -171,7 +176,7 @@ def generate_focus_plot_for_date(date_str: str):
                         x = start + (width / 2.0)
                         ax.text(
                             x,
-                            0.5,
+                            bar_y + (bar_height / 2.0),
                             label,
                             ha="center",
                             va="center",
