@@ -1,8 +1,10 @@
 # 設定
 focus_minutes: 25
 break_minutes: 2
+break_sound_volume: 0.5
 
 # Tasks
-- [ ] 副業
+
+- [ ] ML
 - [ ] 読書
-- [ ] ゲーム
+- [ ] 資格勉強

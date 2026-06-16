@@ -6,7 +6,28 @@ import threading
 import csv
 import json
 import os
+import ctypes
 from datetime import datetime
+
+DEFAULT_BREAK_SOUND_VOLUME = 1.0
+_WINMM = ctypes.windll.winmm
+
+
+def _read_wave_volume() -> int:
+    value = ctypes.c_uint32()
+    if _WINMM.waveOutGetVolume(0, ctypes.byref(value)):
+        return 0xFFFFFFFF
+    return int(value.value)
+
+
+def _write_wave_volume(raw: int) -> None:
+    _WINMM.waveOutSetVolume(0, raw)
+
+
+def _volume_to_wave_raw(volume: float) -> int:
+    step = int(max(0.0, min(1.0, float(volume))) * 65535)
+    return (step << 16) | step
+
 
 class PomodoroTimer:
     def __init__(self, root):
@@ -33,6 +54,8 @@ class PomodoroTimer:
         self._sheet_config_path = os.path.join(self._script_dir, "sheet_config.json")
         self._break_sound_options, self._break_sound_default_label = self._parse_break_sound_from_config()
         self._break_sound_label_to_file = {o["label"]: o["file"] for o in self._break_sound_options}
+        self._saved_wave_volume = None
+        self.BREAK_SOUND_VOLUME = DEFAULT_BREAK_SOUND_VOLUME
         self.ensure_log_file()
         self._apply_settings()
         
@@ -160,8 +183,8 @@ class PomodoroTimer:
                 normalized.append({"label": label, "file": str(file_val).strip()})
         if not normalized:
             return fallback, fallback[0]["label"]
-        silent = [o["label"] for o in normalized if o["file"] is None]
-        default_lbl = silent[0] if silent else normalized[0]["label"]
+        with_file = [o["label"] for o in normalized if o["file"] is not None]
+        default_lbl = with_file[0] if with_file else normalized[0]["label"]
         return normalized, default_lbl
 
     def _refresh_break_sound_from_disk(self):
@@ -190,8 +213,9 @@ class PomodoroTimer:
         return os.path.join(self._script_dir, fn)
 
     def _apply_settings(self):
-        """tasks.md の focus_minutes / break_minutes を読み込み、FOCUS_TIME / BREAK_TIME を更新する。"""
+        """tasks.md の focus_minutes / break_minutes / break_sound_volume を読み込む。"""
         focus_min, break_min = 25, 5
+        break_volume = DEFAULT_BREAK_SOUND_VOLUME
         if os.path.exists(self.settings_file):
             with open(self.settings_file, "r", encoding="utf-8") as f:
                 for line in f:
@@ -206,8 +230,14 @@ class PomodoroTimer:
                             break_min = max(0, int(line.split(":", 1)[1].strip()))
                         except ValueError:
                             pass
+                    elif line.startswith("break_sound_volume:"):
+                        try:
+                            break_volume = max(0.0, min(1.0, float(line.split(":", 1)[1].strip())))
+                        except ValueError:
+                            pass
         self.FOCUS_TIME = focus_min * 60
         self.BREAK_TIME = break_min * 60
+        self.BREAK_SOUND_VOLUME = break_volume
 
     def load_tasks(self):
         tasks = []
@@ -299,17 +329,37 @@ class PomodoroTimer:
         m, s = divmod(seconds, 60)
         return f"{m:02d}:{s:02d}"
 
+    def _apply_break_wave_volume(self):
+        if self._saved_wave_volume is None:
+            self._saved_wave_volume = _read_wave_volume()
+        _write_wave_volume(_volume_to_wave_raw(self.BREAK_SOUND_VOLUME))
+
+    def _restore_wave_volume(self):
+        if self._saved_wave_volume is not None:
+            _write_wave_volume(self._saved_wave_volume)
+            self._saved_wave_volume = None
+
     def _stop_break_audio(self):
         winsound.PlaySound(None, winsound.SND_PURGE)
+        self._restore_wave_volume()
 
     def _start_break_audio(self):
         path = self._break_wav_path_for_selection()
-        if not path or not os.path.isfile(path):
+        if not path:
+            print("Break audio skipped: silent selection")
             return
+        if not os.path.isfile(path):
+            print(f"Break audio skipped: file not found at {path}")
+            return
+        if self.BREAK_SOUND_VOLUME <= 0.0:
+            print("Break audio skipped: volume is 0")
+            return
+        self._apply_break_wave_volume()
         winsound.PlaySound(
             path,
             winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP,
         )
+        print(f"Break audio started: {path} (volume={self.BREAK_SOUND_VOLUME})")
 
     def toggle_timer(self, event=None):
         if not self.is_running:
